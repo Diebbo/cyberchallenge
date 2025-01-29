@@ -1,0 +1,11 @@
+10
+lab xm
+add e 33
+lab ik
+add d 79
+mul a 48
+jmp d 79 xm
+add c 43
+lab ex
+lab ne
+jmp c 43 ik
