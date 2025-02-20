@@ -1,3 +1,27 @@
 images/
 intput.txt
 output.txt
+
+*.txt
+
+*.so
+
+# binary
+*.exe
+*.dll
+*.jar
+
+# zip
+*.zip
+*.tar
+*.gz
+
+# wireshark
+*.pcap
+*.pcapng
+
+# Ignore all
+*
+
+# Unignore all with extensions
+!*.*
