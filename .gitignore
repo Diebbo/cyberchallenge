@@ -1,6 +1,4 @@
 images/
-intput.txt
-output.txt
 
 *.txt
 
@@ -19,9 +17,3 @@ output.txt
 # wireshark
 *.pcap
 *.pcapng
-
-# Ignore all
-*
-
-# Unignore all with extensions
-!*.*
