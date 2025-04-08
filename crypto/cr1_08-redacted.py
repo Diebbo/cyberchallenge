@@ -13,105 +13,77 @@ print binascii.hexlify(aes.encrypt(msg)).decode()
 """
 
 from Crypto.Cipher import AES
-import binascii, sys
+import binascii
 import string
+from Crypto.Util.Padding import pad
+
+
+def xor_bytes(a, b):
+    """XOR two byte strings of equal length."""
+    return bytes([x ^ y for x, y in zip(a, b)])
+
 
 # Known information
-KNOWN_KEY_PREFIX = "yn9RB3Lr43xJK2"
-CHARSET = string.ascii_lowercase + string.ascii_uppercase + string.digits
+KNOWN_KEY_PREFIX = "yn9RB3Lr43xJK2"  # Last 2 bytes unknown
+CHARSET = string.ascii_letters + string.digits  # Avoid control chars
 MESSAGE = "AES with CBC is very unbreakable"
-INITIAL_CIPHERTEXT_HEX = "c5"
-FINAL_CIPHERTEXT_HEX = "d49e78c670cb67a9e5773d696dc96b78c4e0"
+FINAL_BLOCK_CIPHERTEXT_HEX = "78c670cb67a9e5773d696dc96b78c4e0"
+INITIAL_CIPHERTEXT_FIRST_BYTE = b"c5"
+INITIAL_CIPHERTEXT_LAST_BYTES = b"d49e"
 
-# Make sure the plaintext is properly padded (PKCS#7)
-def pad_message(message):
-    block_size = 16
-    padding_length = block_size - (len(message) % block_size)
-    if padding_length == 0:
-        padding_length = block_size
-    padding = chr(padding_length) * padding_length
-    return message + padding  # Padding goes AFTER the message
+# Padding the message manually
+P2 = MESSAGE[-16:].encode()
+P1 = MESSAGE[:16].encode()
+print(f"P2: {P2}")
+print(f"Final block ciphertext: {FINAL_BLOCK_CIPHERTEXT_HEX}")
+print(f'first byte: {INITIAL_CIPHERTEXT_FIRST_BYTE}')
 
-padded_message = pad_message(MESSAGE)
+possible_ivs = []
+print("🔍 Inizio brute-force...")
 
-# Debug info
-print("Padded message length: {}".format(len(padded_message)))
-print("Padded message hex: {}".format(padded_message))
-
-# Function to recursively find the IV one byte at a time
-def recursive_find_iv(key, iv_so_far, pos):
-    if pos >= 16:
-        # We've checked all positions and found a matching IV
-        return iv_so_far
-    
-    for k in range(256):  # Try all possible byte values (0-255)
-        # Create a new IV with the current byte set
-        new_iv = list(iv_so_far)  # Convert to list for easier byte manipulation
-        new_iv[pos] = chr(k)
-        test_iv = ''.join(new_iv)
-        
-        # Create the cipher with current key and IV guess
-        try:
-            cipher = AES.new(key.encode(), AES.MODE_CBC, test_iv.encode())
-            ciphertext = cipher.encrypt(padded_message)
-            ciphertext_hex = binascii.hexlify(ciphertext)
-            
-            # For debugging - only print every 50th attempt to avoid flooding
-            if k % 50 == 0:
-                print("Trying IV pos {}: byte={}, IV={}".format(
-                    pos, hex(k), binascii.hexlify(test_iv)))
-                print("Ciphertext: {}".format(ciphertext_hex))
-            
-            # Check if the ciphertext matches our known parts
-            if (ciphertext_hex.startswith(INITIAL_CIPHERTEXT_HEX) and 
-                ciphertext_hex.endswith(FINAL_CIPHERTEXT_HEX)):
-                print("\nFOUND MATCH!")
-                print("Key: {}".format(binascii.hexlify(key)))
-                print("IV: {}".format(binascii.hexlify(test_iv)))
-                print("Full ciphertext: {}".format(ciphertext_hex))
-                return test_iv
-                
-            # Optional: If we're finding partial matches, you could add more checks here
-            # For example, if more ciphertext fragments are known
-            
-        except Exception as e:
-            print("Error with IV attempt: {}".format(e))
-    
-    # If we've tried all values for this position and found nothing, return None
-    return None
-
-# Progress counter
-total_keys = len(CHARSET) * len(CHARSET)
-key_count = 0
-
-# Main loop to try different key combinations
+found = False
 for i in CHARSET:
     for j in CHARSET:
-        key_count += 1
-        key = KNOWN_KEY_PREFIX + i + j
-        
-        # Convert key to proper format for AES
-        key_bytes = key
-        
-        # Only print progress occasionally to avoid flooding
-        if key_count % 20 == 0 or key_count == 1:
-            print("\nTrying key {}/{}: {}".format(key_count, total_keys, key))
-        
-        # Start with all zeros for IV
-        iv_start = '\x00' * 16
-        
-        # Try to find a matching IV for this key
-        found_iv = recursive_find_iv(key_bytes, iv_start, 0)
-        
-        if found_iv:
-            print("\n===== SOLUTION FOUND! =====")
-            print("Key: {}".format(key))
-            print("IV: {}".format(binascii.hexlify(found_iv)))
-            
-            # Double check the result
-            cipher = AES.new(key_bytes, AES.MODE_CBC, found_iv)
-            final_ciphertext = cipher.encrypt(padded_message)
-            print("Final ciphertext: {}".format(binascii.hexlify(final_ciphertext)))
-            sys.exit(0)  # Exit on success
+        try:
+            # Construct key
+            candidate_key = (KNOWN_KEY_PREFIX + i + j).encode()
+            cipher = AES.new(candidate_key, AES.MODE_ECB)
 
-print("No solution found")
+            # Extract the last ciphertext block
+            C2 = binascii.unhexlify(FINAL_BLOCK_CIPHERTEXT_HEX)
+
+            # Step 1: decrypt C3
+            D_C2 = cipher.decrypt(C2)
+
+            # Step 2: compute C2 = D_k(C3) XOR P3
+            C1 = xor_bytes(D_C2, P1)
+
+            # print(f'found C1: {C1}')
+            if C1.startswith(INITIAL_CIPHERTEXT_FIRST_BYTE):
+                print('something going on...')
+                if C2.endswith(INITIAL_CIPHERTEXT_LAST_BYTES):
+                    print('wow')
+                print("\n✅ Chiave trovata!")
+                print("Key: {}".format(candidate_key))
+                print("C2: {}".format(binascii.hexlify(C2)))
+                print("D_k(C2): {}".format(binascii.hexlify(D_C2)))
+                found = True
+
+                # find the iv
+                middle = cipher.decrypt(C1)
+                iv = xor_bytes(middle, P1)
+                possible_ivs.append(iv)
+
+        except Exception as e:
+            continue
+
+if not found:
+    print("❌ Nessuna chiave trovata.")
+else:
+    print("🔑 Possibili IV trovati:")
+    for iv in possible_ivs:
+        # verifichiamo cifrino il messaggio
+        cipher = AES.new(candidate_key, AES.MODE_CBC, iv)
+        ciphertext = cipher.encrypt(padded)
+        print("Ciphertext: {}".format(binascii.hexlify(ciphertext)))
+        print("IV: {}".format(binascii.hexlify(iv)))
